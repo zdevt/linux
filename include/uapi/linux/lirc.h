@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  * lirc.h - linux infrared remote control header file
- * last modified 2010/07/13 by Jarod Wilson
  */
 
 #ifndef _LINUX_LIRC_H
@@ -134,6 +133,12 @@
 #define LIRC_SET_WIDEBAND_RECEIVER     _IOW('i', 0x00000023, __u32)
 
 /*
+ * Return the recording timeout, which is either set by
+ * the ioctl LIRC_SET_REC_TIMEOUT or by the kernel after setting the protocols.
+ */
+#define LIRC_GET_REC_TIMEOUT	       _IOR('i', 0x00000024, __u32)
+
+/**
  * struct lirc_scancode - decoded scancode with protocol for use with
  *	LIRC_MODE_SCANCODE
  *
@@ -186,6 +191,11 @@ struct lirc_scancode {
  * @RC_PROTO_XMP: XMP protocol
  * @RC_PROTO_CEC: CEC protocol
  * @RC_PROTO_IMON: iMon Pad protocol
+ * @RC_PROTO_RCMM12: RC-MM protocol 12 bits
+ * @RC_PROTO_RCMM24: RC-MM protocol 24 bits
+ * @RC_PROTO_RCMM32: RC-MM protocol 32 bits
+ * @RC_PROTO_XBOX_DVD: Xbox DVD Movie Playback Kit protocol
+ * @RC_PROTO_MAX: Maximum value of enum rc_proto
  */
 enum rc_proto {
 	RC_PROTO_UNKNOWN	= 0,
@@ -212,6 +222,11 @@ enum rc_proto {
 	RC_PROTO_XMP		= 21,
 	RC_PROTO_CEC		= 22,
 	RC_PROTO_IMON		= 23,
+	RC_PROTO_RCMM12		= 24,
+	RC_PROTO_RCMM24		= 25,
+	RC_PROTO_RCMM32		= 26,
+	RC_PROTO_XBOX_DVD	= 27,
+	RC_PROTO_MAX		= RC_PROTO_XBOX_DVD,
 };
 
 #endif

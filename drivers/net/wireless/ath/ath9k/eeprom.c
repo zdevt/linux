@@ -135,13 +135,23 @@ static bool ath9k_hw_nvram_read_firmware(const struct firmware *eeprom_blob,
 					 offset, data);
 }
 
+static bool ath9k_hw_nvram_read_nvmem(struct ath_hw *ah, off_t offset,
+				      u16 *data)
+{
+	return ath9k_hw_nvram_read_array(ah->nvmem_blob,
+					 ah->nvmem_blob_len / sizeof(u16),
+					 offset, data);
+}
+
 bool ath9k_hw_nvram_read(struct ath_hw *ah, u32 off, u16 *data)
 {
 	struct ath_common *common = ath9k_hw_common(ah);
 	struct ath9k_platform_data *pdata = ah->dev->platform_data;
 	bool ret;
 
-	if (ah->eeprom_blob)
+	if (ah->nvmem_blob)
+		ret = ath9k_hw_nvram_read_nvmem(ah, off, data);
+	else if (ah->eeprom_blob)
 		ret = ath9k_hw_nvram_read_firmware(ah->eeprom_blob, off, data);
 	else if (pdata && !pdata->use_eeprom)
 		ret = ath9k_hw_nvram_read_pdata(pdata, off, data);
@@ -428,7 +438,7 @@ u16 ath9k_hw_get_scaled_power(struct ath_hw *ah, u16 power_limit,
 	else
 		power_limit = 0;
 
-	return power_limit;
+	return min_t(u16, power_limit, MAX_RATE_POWER);
 }
 
 void ath9k_hw_update_regulatory_maxpower(struct ath_hw *ah)

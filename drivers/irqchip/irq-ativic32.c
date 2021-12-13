@@ -5,10 +5,15 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
+#include <linux/hardirq.h>
 #include <linux/interrupt.h>
 #include <linux/irqdomain.h>
 #include <linux/irqchip.h>
 #include <nds32_intrinsic.h>
+
+#include <asm/irq_regs.h>
+
+unsigned long wake_mask;
 
 static void ativic32_ack_irq(struct irq_data *data)
 {
@@ -27,11 +32,40 @@ static void ativic32_unmask_irq(struct irq_data *data)
 	__nds32__mtsr_dsb(int_mask2 | (BIT(data->hwirq)), NDS32_SR_INT_MASK2);
 }
 
+static int nointc_set_wake(struct irq_data *data, unsigned int on)
+{
+	unsigned long int_mask = __nds32__mfsr(NDS32_SR_INT_MASK);
+	static unsigned long irq_orig_bit;
+	u32 bit = 1 << data->hwirq;
+
+	if (on) {
+		if (int_mask & bit)
+			__assign_bit(data->hwirq, &irq_orig_bit, true);
+		else
+			__assign_bit(data->hwirq, &irq_orig_bit, false);
+
+		__assign_bit(data->hwirq, &int_mask, true);
+		__assign_bit(data->hwirq, &wake_mask, true);
+
+	} else {
+		if (!(irq_orig_bit & bit))
+			__assign_bit(data->hwirq, &int_mask, false);
+
+		__assign_bit(data->hwirq, &wake_mask, false);
+		__assign_bit(data->hwirq, &irq_orig_bit, false);
+	}
+
+	__nds32__mtsr_dsb(int_mask, NDS32_SR_INT_MASK);
+
+	return 0;
+}
+
 static struct irq_chip ativic32_chip = {
 	.name = "ativic32",
 	.irq_ack = ativic32_ack_irq,
 	.irq_mask = ativic32_mask_irq,
 	.irq_unmask = ativic32_unmask_irq,
+	.irq_set_wake = nointc_set_wake,
 };
 
 static unsigned int __initdata nivic_map[6] = { 6, 2, 10, 16, 24, 32 };
@@ -61,7 +95,7 @@ static int ativic32_irq_domain_map(struct irq_domain *id, unsigned int virq,
 	return 0;
 }
 
-static struct irq_domain_ops ativic32_ops = {
+static const struct irq_domain_ops ativic32_ops = {
 	.map = ativic32_irq_domain_map,
 	.xlate = irq_domain_xlate_onecell
 };
@@ -72,10 +106,25 @@ static irq_hw_number_t get_intr_src(void)
 		- NDS32_VECTOR_offINTERRUPT;
 }
 
-asmlinkage void asm_do_IRQ(struct pt_regs *regs)
+static void ativic32_handle_irq(struct pt_regs *regs)
 {
 	irq_hw_number_t hwirq = get_intr_src();
-	handle_domain_irq(root_domain, hwirq, regs);
+	generic_handle_domain_irq(root_domain, hwirq);
+}
+
+/*
+ * TODO: convert nds32 to GENERIC_IRQ_MULTI_HANDLER so that this entry logic
+ * can live in arch code.
+ */
+asmlinkage void asm_do_IRQ(struct pt_regs *regs)
+{
+	struct pt_regs *old_regs;
+
+	irq_enter();
+	old_regs = set_irq_regs(regs);
+	ativic32_handle_irq(regs);
+	set_irq_regs(old_regs);
+	irq_exit();
 }
 
 int __init ativic32_init_irq(struct device_node *node, struct device_node *parent)

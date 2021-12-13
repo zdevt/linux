@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) 2018 Redpine Signals Inc.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -73,6 +73,7 @@ int rsi_coex_recv_pkt(struct rsi_common *common, u8 *msg)
 	switch (msg_type) {
 	case COMMON_CARD_READY_IND:
 		rsi_dbg(INFO_ZONE, "common card ready received\n");
+		common->hibernate_resume = false;
 		rsi_handle_card_ready(common, msg);
 		break;
 	case SLEEP_NOTIFY_IND:

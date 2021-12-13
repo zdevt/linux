@@ -152,7 +152,7 @@
 /* The following are PA function descriptors 
  *
  * addr:	the absolute address of the function
- * gp:		either the data pointer (r27) for non-PIC code or the
+ * gp:		either the data pointer (r27) for non-PIC code or
  *		the PLT pointer (r19) for PIC code */
 
 /* Format for the Elf32 Function descriptor */
@@ -235,6 +235,7 @@ typedef unsigned long elf_greg_t;
 #define SET_PERSONALITY(ex) \
 ({	\
 	set_personality((current->personality & ~PER_MASK) | PER_LINUX); \
+	clear_thread_flag(TIF_32BIT); \
 	current->thread.map_base = DEFAULT_MAP_BASE; \
 	current->thread.task_size = DEFAULT_TASK_SIZE; \
  })
@@ -243,9 +244,11 @@ typedef unsigned long elf_greg_t;
 
 #define COMPAT_SET_PERSONALITY(ex) \
 ({	\
-	set_thread_flag(TIF_32BIT); \
-	current->thread.map_base = DEFAULT_MAP_BASE32; \
-	current->thread.task_size = DEFAULT_TASK_SIZE32; \
+	if ((ex).e_ident[EI_CLASS] == ELFCLASS32) { \
+		set_thread_flag(TIF_32BIT); \
+		current->thread.map_base = DEFAULT_MAP_BASE32; \
+		current->thread.task_size = DEFAULT_TASK_SIZE32; \
+	} else clear_thread_flag(TIF_32BIT); \
  })
 
 /*
@@ -301,9 +304,6 @@ typedef double elf_fpreg_t;
 typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 
 struct task_struct;
-
-extern int dump_task_fpu (struct task_struct *, elf_fpregset_t *);
-#define ELF_CORE_COPY_FPREGS(tsk, elf_fpregs) dump_task_fpu(tsk, elf_fpregs)
 
 struct pt_regs;	/* forward declaration... */
 

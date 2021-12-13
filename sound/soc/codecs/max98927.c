@@ -1,13 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * max98927.c  --  MAX98927 ALSA Soc Audio driver
  *
  * Copyright (C) 2016-2017 Maxim Integrated Products
  * Author: Ryan Lee <ryans.lee@maximintegrated.com>
- *
- *  This program is free software; you can redistribute  it and/or modify it
- *  under  the terms of  the GNU General  Public License as published by the
- *  Free Software Foundation;  either version 2 of the  License, or (at your
- *  option) any later version.
  */
 
 #include <linux/acpi.h>
@@ -505,7 +501,7 @@ static int max98927_dac_event(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		max98927->tdm_mode = 0;
+		max98927->tdm_mode = false;
 		break;
 	case SND_SOC_DAPM_POST_PMU:
 		regmap_update_bits(max98927->regmap,
@@ -886,11 +882,11 @@ static int max98927_i2c_probe(struct i2c_client *i2c,
 	if (!of_property_read_u32(i2c->dev.of_node,
 		"interleave_mode", &value)) {
 		if (value > 0)
-			max98927->interleave_mode = 1;
+			max98927->interleave_mode = true;
 		else
-			max98927->interleave_mode = 0;
+			max98927->interleave_mode = false;
 	} else
-		max98927->interleave_mode = 0;
+		max98927->interleave_mode = false;
 
 	/* regmap initialization */
 	max98927->regmap
@@ -900,6 +896,19 @@ static int max98927_i2c_probe(struct i2c_client *i2c,
 		dev_err(&i2c->dev,
 			"Failed to allocate regmap: %d\n", ret);
 		return ret;
+	}
+	
+	max98927->reset_gpio 
+		= devm_gpiod_get_optional(&i2c->dev, "reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(max98927->reset_gpio)) {
+		ret = PTR_ERR(max98927->reset_gpio);
+		return dev_err_probe(&i2c->dev, ret, "failed to request GPIO reset pin");
+	}
+
+	if (max98927->reset_gpio) {
+		gpiod_set_value_cansleep(max98927->reset_gpio, 0);
+		/* Wait for i2c port to be ready */
+		usleep_range(5000, 6000);
 	}
 
 	/* Check Revision ID */
@@ -923,6 +932,17 @@ static int max98927_i2c_probe(struct i2c_client *i2c,
 		dev_err(&i2c->dev, "Failed to register component: %d\n", ret);
 
 	return ret;
+}
+
+static int max98927_i2c_remove(struct i2c_client *i2c)
+{
+	struct max98927_priv *max98927 = i2c_get_clientdata(i2c);
+
+	if (max98927->reset_gpio) {
+		gpiod_set_value_cansleep(max98927->reset_gpio, 1);
+	}
+
+	return 0;
 }
 
 static const struct i2c_device_id max98927_i2c_id[] = {
@@ -956,6 +976,7 @@ static struct i2c_driver max98927_i2c_driver = {
 		.pm = &max98927_pm,
 	},
 	.probe  = max98927_i2c_probe,
+	.remove = max98927_i2c_remove,
 	.id_table = max98927_i2c_id,
 };
 

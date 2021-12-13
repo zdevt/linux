@@ -6,7 +6,6 @@
 #include <linux/preempt.h>
 #include <linux/smp.h>
 #include <linux/cpumask.h>
-#include <linux/printk.h>
 #include <linux/pfn.h>
 #include <linux/init.h>
 
@@ -26,16 +25,10 @@
 #define PCPU_MIN_ALLOC_SHIFT		2
 #define PCPU_MIN_ALLOC_SIZE		(1 << PCPU_MIN_ALLOC_SHIFT)
 
-/* number of bits per page, used to trigger a scan if blocks are > PAGE_SIZE */
-#define PCPU_BITS_PER_PAGE		(PAGE_SIZE >> PCPU_MIN_ALLOC_SHIFT)
-
 /*
- * This determines the size of each metadata block.  There are several subtle
- * constraints around this constant.  The reserved region must be a multiple of
- * PCPU_BITMAP_BLOCK_SIZE.  Additionally, PCPU_BITMAP_BLOCK_SIZE must be a
- * multiple of PAGE_SIZE or PAGE_SIZE must be a multiple of
- * PCPU_BITMAP_BLOCK_SIZE to align with the populated page map. The unit_size
- * also has to be a multiple of PCPU_BITMAP_BLOCK_SIZE to ensure full blocks.
+ * The PCPU_BITMAP_BLOCK_SIZE must be the same size as PAGE_SIZE as the
+ * updating of hints is used to manage the nr_empty_pop_pages in both
+ * the chunk and globally.
  */
 #define PCPU_BITMAP_BLOCK_SIZE		PAGE_SIZE
 #define PCPU_BITMAP_BLOCK_BITS		(PCPU_BITMAP_BLOCK_SIZE >>	\
@@ -111,7 +104,7 @@ extern struct pcpu_alloc_info * __init pcpu_alloc_alloc_info(int nr_groups,
 							     int nr_units);
 extern void __init pcpu_free_alloc_info(struct pcpu_alloc_info *ai);
 
-extern int __init pcpu_setup_first_chunk(const struct pcpu_alloc_info *ai,
+extern void __init pcpu_setup_first_chunk(const struct pcpu_alloc_info *ai,
 					 void *base_addr);
 
 #ifdef CONFIG_NEED_PER_CPU_EMBED_FIRST_CHUNK
@@ -129,7 +122,7 @@ extern int __init pcpu_page_first_chunk(size_t reserved_size,
 				pcpu_fc_populate_pte_fn_t populate_pte_fn);
 #endif
 
-extern void __percpu *__alloc_reserved_percpu(size_t size, size_t align);
+extern void __percpu *__alloc_reserved_percpu(size_t size, size_t align) __alloc_size(1);
 extern bool __is_kernel_percpu_address(unsigned long addr, unsigned long *can_addr);
 extern bool is_kernel_percpu_address(unsigned long addr);
 
@@ -137,8 +130,8 @@ extern bool is_kernel_percpu_address(unsigned long addr);
 extern void __init setup_per_cpu_areas(void);
 #endif
 
-extern void __percpu *__alloc_percpu_gfp(size_t size, size_t align, gfp_t gfp);
-extern void __percpu *__alloc_percpu(size_t size, size_t align);
+extern void __percpu *__alloc_percpu_gfp(size_t size, size_t align, gfp_t gfp) __alloc_size(1);
+extern void __percpu *__alloc_percpu(size_t size, size_t align) __alloc_size(1);
 extern void free_percpu(void __percpu *__pdata);
 extern phys_addr_t per_cpu_ptr_to_phys(void *addr);
 
@@ -148,5 +141,7 @@ extern phys_addr_t per_cpu_ptr_to_phys(void *addr);
 #define alloc_percpu(type)						\
 	(typeof(type) __percpu *)__alloc_percpu(sizeof(type),		\
 						__alignof__(type))
+
+extern unsigned long pcpu_nr_pages(void);
 
 #endif /* __LINUX_PERCPU_H */

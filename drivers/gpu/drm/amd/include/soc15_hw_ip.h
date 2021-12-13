@@ -80,6 +80,8 @@
 #define L1IMU15_HWID                                      65
 #define WAFLC_HWID                                        66
 #define FCH_USB_PD_HWID                                   67
+#define SDMA2_HWID                                        68
+#define SDMA3_HWID                                        69
 #define PCIE_HWID                                         70
 #define PCS_HWID                                          80
 #define DDCL_HWID                                         89
@@ -93,6 +95,8 @@
 #define SATA_HWID                                        168
 #define USB_HWID                                         170
 #define CCXSEC_HWID                                      176
+#define XGMI_HWID                                        200
 #define XGBE_HWID                                        216
-#define MP0_HWID                                         254
+#define MP0_HWID                                         255
+
 #endif

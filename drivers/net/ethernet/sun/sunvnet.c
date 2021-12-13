@@ -234,7 +234,7 @@ static struct vnet_port *vnet_tx_port_find(struct sk_buff *skb,
 }
 
 static u16 vnet_select_queue(struct net_device *dev, struct sk_buff *skb,
-			     void *accel_priv, select_queue_fallback_t fallback)
+			     struct net_device *sb_dev)
 {
 	struct vnet *vp = netdev_priv(dev);
 	struct vnet_port *port = __tx_port_find(vp, skb);
@@ -246,7 +246,7 @@ static u16 vnet_select_queue(struct net_device *dev, struct sk_buff *skb,
 }
 
 /* Wrappers to common functions */
-static int vnet_start_xmit(struct sk_buff *skb, struct net_device *dev)
+static netdev_tx_t vnet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	return sunvnet_start_xmit_common(skb, dev, vnet_tx_port_find);
 }
@@ -285,6 +285,7 @@ static struct vnet *vnet_new(const u64 *local_mac,
 			     struct vio_dev *vdev)
 {
 	struct net_device *dev;
+	u8 addr[ETH_ALEN];
 	struct vnet *vp;
 	int err, i;
 
@@ -295,7 +296,8 @@ static struct vnet *vnet_new(const u64 *local_mac,
 	dev->needed_tailroom = 8;
 
 	for (i = 0; i < ETH_ALEN; i++)
-		dev->dev_addr[i] = (*local_mac >> (5 - i) * 8) & 0xff;
+		addr[i] = (*local_mac >> (5 - i) * 8) & 0xff;
+	eth_hw_addr_set(dev, addr);
 
 	vp = netdev_priv(dev);
 
@@ -510,7 +512,7 @@ err_out_put_mdesc:
 	return err;
 }
 
-static int vnet_port_remove(struct vio_dev *vdev)
+static void vnet_port_remove(struct vio_dev *vdev)
 {
 	struct vnet_port *port = dev_get_drvdata(&vdev->dev);
 
@@ -533,7 +535,6 @@ static int vnet_port_remove(struct vio_dev *vdev)
 
 		kfree(port);
 	}
-	return 0;
 }
 
 static const struct vio_device_id vnet_port_match[] = {

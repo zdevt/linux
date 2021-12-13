@@ -1,12 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /* rxrpc network namespace handling.
  *
  * Copyright (C) 2017 Red Hat, Inc. All Rights Reserved.
  * Written by David Howells (dhowells@redhat.com)
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public Licence
- * as published by the Free Software Foundation; either version
- * 2 of the Licence, or (at your option) any later version.
  */
 
 #include <linux/proc_fs.h>
@@ -66,13 +62,10 @@ static __net_init int rxrpc_init_net(struct net *net)
 	timer_setup(&rxnet->service_conn_reap_timer,
 		    rxrpc_service_conn_reap_timeout, 0);
 
-	rxnet->nr_client_conns = 0;
-	rxnet->nr_active_client_conns = 0;
+	atomic_set(&rxnet->nr_client_conns, 0);
 	rxnet->kill_all_client_conns = false;
 	spin_lock_init(&rxnet->client_conn_cache_lock);
 	spin_lock_init(&rxnet->client_conn_discard_lock);
-	INIT_LIST_HEAD(&rxnet->waiting_client_conns);
-	INIT_LIST_HEAD(&rxnet->active_client_conns);
 	INIT_LIST_HEAD(&rxnet->idle_client_conns);
 	INIT_WORK(&rxnet->client_conn_reaper,
 		  rxrpc_discard_expired_client_conns);
@@ -85,20 +78,26 @@ static __net_init int rxrpc_init_net(struct net *net)
 	hash_init(rxnet->peer_hash);
 	spin_lock_init(&rxnet->peer_hash_lock);
 	for (i = 0; i < ARRAY_SIZE(rxnet->peer_keepalive); i++)
-		INIT_HLIST_HEAD(&rxnet->peer_keepalive[i]);
-	INIT_HLIST_HEAD(&rxnet->peer_keepalive_new);
+		INIT_LIST_HEAD(&rxnet->peer_keepalive[i]);
+	INIT_LIST_HEAD(&rxnet->peer_keepalive_new);
 	timer_setup(&rxnet->peer_keepalive_timer,
 		    rxrpc_peer_keepalive_timeout, 0);
 	INIT_WORK(&rxnet->peer_keepalive_work, rxrpc_peer_keepalive_worker);
-	rxnet->peer_keepalive_base = ktime_add(ktime_get_real(), NSEC_PER_SEC);
+	rxnet->peer_keepalive_base = ktime_get_seconds();
 
 	ret = -ENOMEM;
 	rxnet->proc_net = proc_net_mkdir(net, "rxrpc", net->proc_net);
 	if (!rxnet->proc_net)
 		goto err_proc;
 
-	proc_create("calls", 0444, rxnet->proc_net, &rxrpc_call_seq_fops);
-	proc_create("conns", 0444, rxnet->proc_net, &rxrpc_connection_seq_fops);
+	proc_create_net("calls", 0444, rxnet->proc_net, &rxrpc_call_seq_ops,
+			sizeof(struct seq_net_private));
+	proc_create_net("conns", 0444, rxnet->proc_net,
+			&rxrpc_connection_seq_ops,
+			sizeof(struct seq_net_private));
+	proc_create_net("peers", 0444, rxnet->proc_net,
+			&rxrpc_peer_seq_ops,
+			sizeof(struct seq_net_private));
 	return 0;
 
 err_proc:

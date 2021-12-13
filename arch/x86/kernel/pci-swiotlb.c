@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Glue code to lib/swiotlb.c */
 
 #include <linux/pci.h>
 #include <linux/cache.h>
 #include <linux/init.h>
 #include <linux/swiotlb.h>
-#include <linux/bootmem.h>
+#include <linux/memblock.h>
 #include <linux/dma-direct.h>
-#include <linux/mem_encrypt.h>
+#include <linux/cc_platform.h>
 
 #include <asm/iommu.h>
 #include <asm/swiotlb.h>
@@ -42,17 +41,14 @@ IOMMU_INIT_FINISH(pci_swiotlb_detect_override,
 int __init pci_swiotlb_detect_4gb(void)
 {
 	/* don't initialize swiotlb if iommu=off (no_iommu=1) */
-#ifdef CONFIG_X86_64
 	if (!no_iommu && max_possible_pfn > MAX_DMA32_PFN)
 		swiotlb = 1;
-#endif
 
 	/*
-	 * If SME is active then swiotlb will be set to 1 so that bounce
-	 * buffers are allocated and used for devices that do not support
-	 * the addressing range required for the encryption mask.
+	 * Set swiotlb to 1 so that bounce buffers are allocated and used for
+	 * devices that can't support DMA to encrypted memory.
 	 */
-	if (sme_active())
+	if (cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT))
 		swiotlb = 1;
 
 	return swiotlb;
@@ -64,10 +60,8 @@ IOMMU_INIT(pci_swiotlb_detect_4gb,
 
 void __init pci_swiotlb_init(void)
 {
-	if (swiotlb) {
+	if (swiotlb)
 		swiotlb_init(0);
-		dma_ops = &swiotlb_dma_ops;
-	}
 }
 
 void __init pci_swiotlb_late_init(void)

@@ -11,12 +11,6 @@
 #include <linux/personality.h>	/* for ADDR_LIMIT_32BIT */
 
 /*
- * Returns current instruction pointer ("program counter").
- */
-#define current_text_addr() \
-  ({ void *__pc; __asm__ ("br %0,.+4" : "=r"(__pc)); __pc; })
-
-/*
  * We have a 42-bit user address space: 4TB user VM...
  */
 #define TASK_SIZE (0x40000000000UL)
@@ -48,7 +42,7 @@ extern void start_thread(struct pt_regs *, unsigned long, unsigned long);
 struct task_struct;
 extern void release_thread(struct task_struct *);
 
-unsigned long get_wchan(struct task_struct *p);
+unsigned long __get_wchan(struct task_struct *p);
 
 #define KSTK_EIP(tsk) (task_pt_regs(tsk)->pc)
 

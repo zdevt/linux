@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright 2017 ATMEL
  * Copyright 2017 Free Electrons
@@ -27,10 +28,6 @@
  *
  *   Add Nand Flash Controller support for SAMA5 SoC
  *	Copyright 2013 ATMEL, Josh Wu (josh.wu@atmel.com)
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  *
  * The PMECC is an hardware assisted BCH engine, which means part of the
  * ECC algorithm is left to the software. The hardware/software repartition
@@ -837,7 +834,6 @@ static struct atmel_pmecc *atmel_pmecc_create(struct platform_device *pdev,
 {
 	struct device *dev = &pdev->dev;
 	struct atmel_pmecc *pmecc;
-	struct resource *res;
 
 	pmecc = devm_kzalloc(dev, sizeof(*pmecc), GFP_KERNEL);
 	if (!pmecc)
@@ -847,13 +843,11 @@ static struct atmel_pmecc *atmel_pmecc_create(struct platform_device *pdev,
 	pmecc->dev = dev;
 	mutex_init(&pmecc->lock);
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, pmecc_res_idx);
-	pmecc->regs.base = devm_ioremap_resource(dev, res);
+	pmecc->regs.base = devm_platform_ioremap_resource(pdev, pmecc_res_idx);
 	if (IS_ERR(pmecc->regs.base))
 		return ERR_CAST(pmecc->regs.base);
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, errloc_res_idx);
-	pmecc->regs.errloc = devm_ioremap_resource(dev, res);
+	pmecc->regs.errloc = devm_platform_ioremap_resource(pdev, errloc_res_idx);
 	if (IS_ERR(pmecc->regs.errloc))
 		return ERR_CAST(pmecc->regs.errloc);
 
@@ -876,23 +870,32 @@ static struct atmel_pmecc *atmel_pmecc_get_by_node(struct device *userdev,
 {
 	struct platform_device *pdev;
 	struct atmel_pmecc *pmecc, **ptr;
+	int ret;
 
 	pdev = of_find_device_by_node(np);
-	if (!pdev || !platform_get_drvdata(pdev))
+	if (!pdev)
 		return ERR_PTR(-EPROBE_DEFER);
+	pmecc = platform_get_drvdata(pdev);
+	if (!pmecc) {
+		ret = -EPROBE_DEFER;
+		goto err_put_device;
+	}
 
 	ptr = devres_alloc(devm_atmel_pmecc_put, sizeof(*ptr), GFP_KERNEL);
-	if (!ptr)
-		return ERR_PTR(-ENOMEM);
-
-	get_device(&pdev->dev);
-	pmecc = platform_get_drvdata(pdev);
+	if (!ptr) {
+		ret = -ENOMEM;
+		goto err_put_device;
+	}
 
 	*ptr = pmecc;
 
 	devres_add(userdev, ptr);
 
 	return pmecc;
+
+err_put_device:
+	put_device(&pdev->dev);
+	return ERR_PTR(ret);
 }
 
 static const int atmel_pmecc_strengths[] = { 2, 4, 8, 12, 24, 32 };

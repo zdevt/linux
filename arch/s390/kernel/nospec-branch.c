@@ -17,11 +17,11 @@ static int __init nobp_setup_early(char *str)
 		 * The user explicitely requested nobp=1, enable it and
 		 * disable the expoline support.
 		 */
-		__set_facility(82, S390_lowcore.alt_stfle_fac_list);
+		__set_facility(82, alt_stfle_fac_list);
 		if (IS_ENABLED(CONFIG_EXPOLINE))
 			nospec_disable = 1;
 	} else {
-		__clear_facility(82, S390_lowcore.alt_stfle_fac_list);
+		__clear_facility(82, alt_stfle_fac_list);
 	}
 	return 0;
 }
@@ -29,38 +29,22 @@ early_param("nobp", nobp_setup_early);
 
 static int __init nospec_setup_early(char *str)
 {
-	__clear_facility(82, S390_lowcore.alt_stfle_fac_list);
+	__clear_facility(82, alt_stfle_fac_list);
 	return 0;
 }
 early_param("nospec", nospec_setup_early);
 
 static int __init nospec_report(void)
 {
-	if (IS_ENABLED(CC_USING_EXPOLINE) && !nospec_disable)
-		pr_info("Spectre V2 mitigation: execute trampolines.\n");
-	if (__test_facility(82, S390_lowcore.alt_stfle_fac_list))
-		pr_info("Spectre V2 mitigation: limited branch prediction.\n");
+	if (test_facility(156))
+		pr_info("Spectre V2 mitigation: etokens\n");
+	if (nospec_uses_trampoline())
+		pr_info("Spectre V2 mitigation: execute trampolines\n");
+	if (__test_facility(82, alt_stfle_fac_list))
+		pr_info("Spectre V2 mitigation: limited branch prediction\n");
 	return 0;
 }
 arch_initcall(nospec_report);
-
-#ifdef CONFIG_SYSFS
-ssize_t cpu_show_spectre_v1(struct device *dev,
-			    struct device_attribute *attr, char *buf)
-{
-	return sprintf(buf, "Mitigation: __user pointer sanitization\n");
-}
-
-ssize_t cpu_show_spectre_v2(struct device *dev,
-			    struct device_attribute *attr, char *buf)
-{
-	if (IS_ENABLED(CC_USING_EXPOLINE) && !nospec_disable)
-		return sprintf(buf, "Mitigation: execute trampolines\n");
-	if (__test_facility(82, S390_lowcore.alt_stfle_fac_list))
-		return sprintf(buf, "Mitigation: limited branch prediction.\n");
-	return sprintf(buf, "Vulnerable\n");
-}
-#endif
 
 #ifdef CONFIG_EXPOLINE
 
@@ -75,13 +59,21 @@ early_param("nospectre_v2", nospectre_v2_setup_early);
 
 void __init nospec_auto_detect(void)
 {
-	if (IS_ENABLED(CC_USING_EXPOLINE)) {
+	if (test_facility(156) || cpu_mitigations_off()) {
+		/*
+		 * The machine supports etokens.
+		 * Disable expolines and disable nobp.
+		 */
+		if (__is_defined(CC_USING_EXPOLINE))
+			nospec_disable = 1;
+		__clear_facility(82, alt_stfle_fac_list);
+	} else if (__is_defined(CC_USING_EXPOLINE)) {
 		/*
 		 * The kernel has been compiled with expolines.
 		 * Keep expolines enabled and disable nobp.
 		 */
 		nospec_disable = 0;
-		__clear_facility(82, S390_lowcore.alt_stfle_fac_list);
+		__clear_facility(82, alt_stfle_fac_list);
 	}
 	/*
 	 * If the kernel has not been compiled with expolines the
@@ -94,7 +86,7 @@ static int __init spectre_v2_setup_early(char *str)
 {
 	if (str && !strncmp(str, "on", 2)) {
 		nospec_disable = 0;
-		__clear_facility(82, S390_lowcore.alt_stfle_fac_list);
+		__clear_facility(82, alt_stfle_fac_list);
 	}
 	if (str && !strncmp(str, "off", 3))
 		nospec_disable = 1;
@@ -107,12 +99,12 @@ early_param("spectre_v2", spectre_v2_setup_early);
 static void __init_or_module __nospec_revert(s32 *start, s32 *end)
 {
 	enum { BRCL_EXPOLINE, BRASL_EXPOLINE } type;
+	static const u8 branch[] = { 0x47, 0x00, 0x07, 0x00 };
 	u8 *instr, *thunk, *br;
 	u8 insnbuf[6];
 	s32 *epo;
 
 	/* Second part of the instruction replace is always a nop */
-	memcpy(insnbuf + 2, (char[]) { 0x47, 0x00, 0x00, 0x00 }, 4);
 	for (epo = start; epo < end; epo++) {
 		instr = (u8 *) epo + *epo;
 		if (instr[0] == 0xc0 && (instr[1] & 0x0f) == 0x04)
@@ -133,18 +125,34 @@ static void __init_or_module __nospec_revert(s32 *start, s32 *end)
 			br = thunk + (*(int *)(thunk + 2)) * 2;
 		else
 			continue;
-		if (br[0] != 0x07 || (br[1] & 0xf0) != 0xf0)
+		/* Check for unconditional branch 0x07f? or 0x47f???? */
+		if ((br[0] & 0xbf) != 0x07 || (br[1] & 0xf0) != 0xf0)
 			continue;
+
+		memcpy(insnbuf + 2, branch, sizeof(branch));
 		switch (type) {
 		case BRCL_EXPOLINE:
-			/* brcl to thunk, replace with br + nop */
 			insnbuf[0] = br[0];
 			insnbuf[1] = (instr[1] & 0xf0) | (br[1] & 0x0f);
+			if (br[0] == 0x47) {
+				/* brcl to b, replace with bc + nopr */
+				insnbuf[2] = br[2];
+				insnbuf[3] = br[3];
+			} else {
+				/* brcl to br, replace with bcr + nop */
+			}
 			break;
 		case BRASL_EXPOLINE:
-			/* brasl to thunk, replace with basr + nop */
-			insnbuf[0] = 0x0d;
 			insnbuf[1] = (instr[1] & 0xf0) | (br[1] & 0x0f);
+			if (br[0] == 0x47) {
+				/* brasl to b, replace with bas + nopr */
+				insnbuf[0] = 0x4d;
+				insnbuf[2] = br[2];
+				insnbuf[3] = br[3];
+			} else {
+				/* brasl to br, replace with basr + nop */
+				insnbuf[0] = 0x0d;
+			}
 			break;
 		}
 

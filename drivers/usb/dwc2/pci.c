@@ -63,20 +63,12 @@ struct dwc2_pci_glue {
 	struct platform_device *phy;
 };
 
-static int dwc2_pci_quirks(struct pci_dev *pdev, struct platform_device *dwc2)
-{
-	if (pdev->vendor == PCI_VENDOR_ID_SYNOPSYS &&
-	    pdev->device == PCI_PRODUCT_ID_HAPS_HSOTG) {
-		struct property_entry properties[] = {
-			{ },
-		};
-
-		return platform_device_add_properties(dwc2, properties);
-	}
-
-	return 0;
-}
-
+/**
+ * dwc2_pci_remove() - Provides the cleanup entry points for the DWC_otg PCI
+ * driver
+ *
+ * @pci: The programming view of DWC_otg PCI
+ */
 static void dwc2_pci_remove(struct pci_dev *pci)
 {
 	struct dwc2_pci_glue *glue = pci_get_drvdata(pci);
@@ -114,6 +106,7 @@ static int dwc2_pci_probe(struct pci_dev *pci,
 	dwc2 = platform_device_alloc("dwc2", PLATFORM_DEVID_AUTO);
 	if (!dwc2) {
 		dev_err(dev, "couldn't allocate dwc2 device\n");
+		ret = -ENOMEM;
 		goto err;
 	}
 
@@ -135,10 +128,6 @@ static int dwc2_pci_probe(struct pci_dev *pci,
 	}
 
 	dwc2->dev.parent = dev;
-
-	ret = dwc2_pci_quirks(pci, dwc2);
-	if (ret)
-		goto err;
 
 	glue = devm_kzalloc(dev, sizeof(*glue), GFP_KERNEL);
 	if (!glue) {

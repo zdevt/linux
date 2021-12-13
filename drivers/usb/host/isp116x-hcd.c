@@ -1019,7 +1019,7 @@ static int isp116x_hub_control(struct usb_hcd *hcd,
 			spin_lock_irqsave(&isp116x->lock, flags);
 			isp116x_write_reg32(isp116x, HCRHSTATUS, RH_HS_OCIC);
 			spin_unlock_irqrestore(&isp116x->lock, flags);
-			/* fall through */
+			fallthrough;
 		case C_HUB_LOCAL_POWER:
 			DBG("C_HUB_LOCAL_POWER\n");
 			break;
@@ -1198,25 +1198,21 @@ static int isp116x_debug_show(struct seq_file *s, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(isp116x_debug);
 
-static int create_debug_file(struct isp116x *isp116x)
+static void create_debug_file(struct isp116x *isp116x)
 {
-	isp116x->dentry = debugfs_create_file(hcd_name,
-					      S_IRUGO, NULL, isp116x,
-					      &isp116x_debug_fops);
-	if (!isp116x->dentry)
-		return -ENOMEM;
-	return 0;
+	debugfs_create_file(hcd_name, S_IRUGO, usb_debug_root, isp116x,
+			    &isp116x_debug_fops);
 }
 
 static void remove_debug_file(struct isp116x *isp116x)
 {
-	debugfs_remove(isp116x->dentry);
+	debugfs_remove(debugfs_lookup(hcd_name, usb_debug_root));
 }
 
 #else
 
-#define	create_debug_file(d)	0
-#define	remove_debug_file(d)	do{}while(0)
+static inline void create_debug_file(struct isp116x *isp116x) { }
+static inline void remove_debug_file(struct isp116x *isp116x) { }
 
 #endif				/* CONFIG_DEBUG_FS */
 
@@ -1424,10 +1420,10 @@ static int isp116x_bus_suspend(struct usb_hcd *hcd)
 		isp116x_write_reg32(isp116x, HCCONTROL,
 				    (val & ~HCCONTROL_HCFS) |
 				    HCCONTROL_USB_RESET);
-		/* fall through */
+		fallthrough;
 	case HCCONTROL_USB_RESET:
 		ret = -EBUSY;
-		/* fall through */
+		fallthrough;
 	default:		/* HCCONTROL_USB_SUSPEND */
 		spin_unlock_irqrestore(&isp116x->lock, flags);
 		break;
@@ -1450,6 +1446,7 @@ static int isp116x_bus_resume(struct usb_hcd *hcd)
 		val &= ~HCCONTROL_HCFS;
 		val |= HCCONTROL_USB_RESUME;
 		isp116x_write_reg32(isp116x, HCCONTROL, val);
+		break;
 	case HCCONTROL_USB_RESUME:
 		break;
 	case HCCONTROL_USB_OPER:
@@ -1584,12 +1581,6 @@ static int isp116x_probe(struct platform_device *pdev)
 	irq = ires->start;
 	irqflags = ires->flags & IRQF_TRIGGER_MASK;
 
-	if (pdev->dev.dma_mask) {
-		DBG("DMA not supported\n");
-		ret = -EINVAL;
-		goto err1;
-	}
-
 	if (!request_mem_region(addr->start, 2, hcd_name)) {
 		ret = -EBUSY;
 		goto err1;
@@ -1643,16 +1634,10 @@ static int isp116x_probe(struct platform_device *pdev)
 
 	device_wakeup_enable(hcd->self.controller);
 
-	ret = create_debug_file(isp116x);
-	if (ret) {
-		ERR("Couldn't create debugfs entry\n");
-		goto err7;
-	}
+	create_debug_file(isp116x);
 
 	return 0;
 
-      err7:
-	usb_remove_hcd(hcd);
       err6:
 	usb_put_hcd(hcd);
       err5:

@@ -137,14 +137,13 @@ static int ocfs2_read_quota_block(struct inode *inode, u64 v_block,
 	int rc = 0;
 	struct buffer_head *tmp = *bh;
 
-	if (i_size_read(inode) >> inode->i_sb->s_blocksize_bits <= v_block) {
-		ocfs2_error(inode->i_sb,
-			    "Quota file %llu is probably corrupted! Requested to read block %Lu but file has size only %Lu\n",
-			    (unsigned long long)OCFS2_I(inode)->ip_blkno,
-			    (unsigned long long)v_block,
-			    (unsigned long long)i_size_read(inode));
-		return -EIO;
-	}
+	if (i_size_read(inode) >> inode->i_sb->s_blocksize_bits <= v_block)
+		return ocfs2_error(inode->i_sb,
+				"Quota file %llu is probably corrupted! Requested to read block %Lu but file has size only %Lu\n",
+				(unsigned long long)OCFS2_I(inode)->ip_blkno,
+				(unsigned long long)v_block,
+				(unsigned long long)i_size_read(inode));
+
 	rc = ocfs2_read_virt_blocks(inode, v_block, 1, &tmp, 0,
 				    ocfs2_validate_quota_block);
 	if (rc)
@@ -703,6 +702,8 @@ static int ocfs2_local_read_info(struct super_block *sb, int type)
 	info->dqi_priv = oinfo;
 	oinfo->dqi_type = type;
 	INIT_LIST_HEAD(&oinfo->dqi_chunk);
+	oinfo->dqi_gqinode = NULL;
+	ocfs2_qinfo_lock_res_init(&oinfo->dqi_gqlock, oinfo);
 	oinfo->dqi_rec = NULL;
 	oinfo->dqi_lqi_bh = NULL;
 	oinfo->dqi_libh = NULL;

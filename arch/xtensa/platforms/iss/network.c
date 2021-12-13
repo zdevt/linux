@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  *
  * arch/xtensa/platforms/iss/network.c
@@ -8,12 +9,6 @@
  * Based on work form the UML team.
  *
  * Copyright 2005 Tensilica Inc.
- *
- * This program is free software; you can redistribute  it and/or modify it
- * under  the terms of  the GNU General  Public License as published by the
- * Free Software Foundation;  either version 2 of the  License, or (at your
- * option) any later version.
- *
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -30,7 +25,7 @@
 #include <linux/etherdevice.h>
 #include <linux/interrupt.h>
 #include <linux/ioctl.h>
-#include <linux/bootmem.h>
+#include <linux/memblock.h>
 #include <linux/ethtool.h>
 #include <linux/rtnetlink.h>
 #include <linux/platform_device.h>
@@ -129,7 +124,7 @@ static char *split_if_spec(char *str, ...)
 
 static void setup_etheraddr(struct net_device *dev, char *str)
 {
-	unsigned char *addr = dev->dev_addr;
+	u8 addr[ETH_ALEN];
 
 	if (str == NULL)
 		goto random;
@@ -152,6 +147,7 @@ static void setup_etheraddr(struct net_device *dev, char *str)
 	if (!is_local_ether_addr(addr))
 		pr_warn("%s: assigning a globally valid ethernet address\n",
 			dev->name);
+	eth_hw_addr_set(dev, addr);
 	return;
 
 random:
@@ -460,7 +456,7 @@ static void iss_net_set_multicast_list(struct net_device *dev)
 {
 }
 
-static void iss_net_tx_timeout(struct net_device *dev)
+static void iss_net_tx_timeout(struct net_device *dev, unsigned int txqueue)
 {
 }
 
@@ -472,7 +468,7 @@ static int iss_net_set_mac(struct net_device *dev, void *addr)
 	if (!is_valid_ether_addr(hwaddr->sa_data))
 		return -EADDRNOTAVAIL;
 	spin_lock_bh(&lp->lock);
-	memcpy(dev->dev_addr, hwaddr->sa_data, ETH_ALEN);
+	eth_hw_addr_set(dev, hwaddr->sa_data);
 	spin_unlock_bh(&lp->lock);
 	return 0;
 }
@@ -646,7 +642,7 @@ static int __init iss_net_setup(char *str)
 		return 1;
 	}
 
-	new = alloc_bootmem(sizeof(*new));
+	new = memblock_alloc(sizeof(*new), SMP_CACHE_BYTES);
 	if (new == NULL) {
 		pr_err("Alloc_bootmem failed\n");
 		return 1;

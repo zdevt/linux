@@ -1,22 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Copyright(c) 2004-2005 Intel Corporation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the
- * Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- * for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, see <http://www.gnu.org/licenses/>.
- *
- * The full GNU General Public License is included in this distribution in the
- * file called LICENSE.
- *
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -160,14 +144,19 @@ static ssize_t bonding_sysfs_store_option(struct device *d,
 {
 	struct bonding *bond = to_bond(d);
 	const struct bond_option *opt;
+	char *buffer_clone;
 	int ret;
 
 	opt = bond_opt_get_by_name(attr->attr.name);
 	if (WARN_ON(!opt))
 		return -ENOENT;
-	ret = bond_opt_tryset_rtnl(bond, opt->id, (char *)buffer);
+	buffer_clone = kstrndup(buffer, count, GFP_KERNEL);
+	if (!buffer_clone)
+		return -ENOMEM;
+	ret = bond_opt_tryset_rtnl(bond, opt->id, buffer_clone);
 	if (!ret)
 		ret = count;
+	kfree(buffer_clone);
 
 	return ret;
 }
@@ -338,10 +327,36 @@ static ssize_t bonding_show_updelay(struct device *d,
 static DEVICE_ATTR(updelay, 0644,
 		   bonding_show_updelay, bonding_sysfs_store_option);
 
-/* Show the LACP interval. */
-static ssize_t bonding_show_lacp(struct device *d,
-				 struct device_attribute *attr,
-				 char *buf)
+static ssize_t bonding_show_peer_notif_delay(struct device *d,
+					     struct device_attribute *attr,
+					     char *buf)
+{
+	struct bonding *bond = to_bond(d);
+
+	return sprintf(buf, "%d\n",
+		       bond->params.peer_notif_delay * bond->params.miimon);
+}
+static DEVICE_ATTR(peer_notif_delay, 0644,
+		   bonding_show_peer_notif_delay, bonding_sysfs_store_option);
+
+/* Show the LACP activity and interval. */
+static ssize_t bonding_show_lacp_active(struct device *d,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct bonding *bond = to_bond(d);
+	const struct bond_opt_value *val;
+
+	val = bond_opt_get_val(BOND_OPT_LACP_ACTIVE, bond->params.lacp_active);
+
+	return sprintf(buf, "%s %d\n", val->string, bond->params.lacp_active);
+}
+static DEVICE_ATTR(lacp_active, 0644,
+		   bonding_show_lacp_active, bonding_sysfs_store_option);
+
+static ssize_t bonding_show_lacp_rate(struct device *d,
+				      struct device_attribute *attr,
+				      char *buf)
 {
 	struct bonding *bond = to_bond(d);
 	const struct bond_opt_value *val;
@@ -351,7 +366,7 @@ static ssize_t bonding_show_lacp(struct device *d,
 	return sprintf(buf, "%s %d\n", val->string, bond->params.lacp_fast);
 }
 static DEVICE_ATTR(lacp_rate, 0644,
-		   bonding_show_lacp, bonding_sysfs_store_option);
+		   bonding_show_lacp_rate, bonding_sysfs_store_option);
 
 static ssize_t bonding_show_min_links(struct device *d,
 				      struct device_attribute *attr,
@@ -384,6 +399,7 @@ static ssize_t bonding_show_num_peer_notif(struct device *d,
 					   char *buf)
 {
 	struct bonding *bond = to_bond(d);
+
 	return sprintf(buf, "%d\n", bond->params.num_peer_notif);
 }
 static DEVICE_ATTR(num_grat_arp, 0644,
@@ -495,6 +511,7 @@ static ssize_t bonding_show_ad_aggregator(struct device *d,
 
 	if (BOND_MODE(bond) == BOND_MODE_8023AD) {
 		struct ad_info ad_info;
+
 		count = sprintf(buf, "%d\n",
 				bond_3ad_get_active_agg_info(bond, &ad_info)
 				?  0 : ad_info.aggregator_id);
@@ -515,6 +532,7 @@ static ssize_t bonding_show_ad_num_ports(struct device *d,
 
 	if (BOND_MODE(bond) == BOND_MODE_8023AD) {
 		struct ad_info ad_info;
+
 		count = sprintf(buf, "%d\n",
 				bond_3ad_get_active_agg_info(bond, &ad_info)
 				?  0 : ad_info.ports);
@@ -535,6 +553,7 @@ static ssize_t bonding_show_ad_actor_key(struct device *d,
 
 	if (BOND_MODE(bond) == BOND_MODE_8023AD && capable(CAP_NET_ADMIN)) {
 		struct ad_info ad_info;
+
 		count = sprintf(buf, "%d\n",
 				bond_3ad_get_active_agg_info(bond, &ad_info)
 				?  0 : ad_info.actor_key);
@@ -555,6 +574,7 @@ static ssize_t bonding_show_ad_partner_key(struct device *d,
 
 	if (BOND_MODE(bond) == BOND_MODE_8023AD && capable(CAP_NET_ADMIN)) {
 		struct ad_info ad_info;
+
 		count = sprintf(buf, "%d\n",
 				bond_3ad_get_active_agg_info(bond, &ad_info)
 				?  0 : ad_info.partner_key);
@@ -575,6 +595,7 @@ static ssize_t bonding_show_ad_partner_mac(struct device *d,
 
 	if (BOND_MODE(bond) == BOND_MODE_8023AD && capable(CAP_NET_ADMIN)) {
 		struct ad_info ad_info;
+
 		if (!bond_3ad_get_active_agg_info(bond, &ad_info))
 			count = sprintf(buf, "%pM\n", ad_info.partner_system);
 	}
@@ -659,6 +680,7 @@ static ssize_t bonding_show_tlb_dynamic_lb(struct device *d,
 					   char *buf)
 {
 	struct bonding *bond = to_bond(d);
+
 	return sprintf(buf, "%d\n", bond->params.tlb_dynamic_lb);
 }
 static DEVICE_ATTR(tlb_dynamic_lb, 0644,
@@ -729,6 +751,8 @@ static struct attribute *per_bond_attrs[] = {
 	&dev_attr_arp_ip_target.attr,
 	&dev_attr_downdelay.attr,
 	&dev_attr_updelay.attr,
+	&dev_attr_peer_notif_delay.attr,
+	&dev_attr_lacp_active.attr,
 	&dev_attr_lacp_rate.attr,
 	&dev_attr_ad_select.attr,
 	&dev_attr_xmit_hash_policy.attr,
@@ -787,8 +811,8 @@ int bond_create_sysfs(struct bond_net *bn)
 	 */
 	if (ret == -EEXIST) {
 		/* Is someone being kinky and naming a device bonding_master? */
-		if (__dev_get_by_name(bn->net,
-				      class_attr_bonding_masters.attr.name))
+		if (netdev_name_in_use(bn->net,
+				       class_attr_bonding_masters.attr.name))
 			pr_err("network device named %s already exists in sysfs\n",
 			       class_attr_bonding_masters.attr.name);
 		ret = 0;

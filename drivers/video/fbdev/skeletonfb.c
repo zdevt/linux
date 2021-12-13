@@ -505,15 +505,15 @@ void xxxfb_fillrect(struct fb_info *p, const struct fb_fillrect *region)
 }
 
 /**
- *      xxxfb_copyarea - REQUIRED function. Can use generic routines if
- *                       non acclerated hardware and packed pixel based.
+ *      xxxfb_copyarea - OBSOLETE function.
  *                       Copies one area of the screen to another area.
+ *                       Will be deleted in a future version
  *
  *      @info: frame buffer structure that represents a single frame buffer
  *      @area: Structure providing the data to copy the framebuffer contents
  *	       from one region to another.
  *
- *      This drawing operation copies a rectangular area from one area of the
+ *      This drawing operation copied a rectangular area from one area of the
  *	screen to another area.
  */
 void xxxfb_copyarea(struct fb_info *p, const struct fb_copyarea *area) 
@@ -634,7 +634,7 @@ int xxxfb_sync(struct fb_info *info)
      *  Frame buffer operations
      */
 
-static struct fb_ops xxxfb_ops = {
+static const struct fb_ops xxxfb_ops = {
 	.owner		= THIS_MODULE,
 	.fb_open	= xxxfb_open,
 	.fb_read	= xxxfb_read,
@@ -645,9 +645,9 @@ static struct fb_ops xxxfb_ops = {
 	.fb_setcolreg	= xxxfb_setcolreg,
 	.fb_blank	= xxxfb_blank,
 	.fb_pan_display	= xxxfb_pan_display,
-	.fb_fillrect	= xxxfb_fillrect, 	/* Needed !!! */
-	.fb_copyarea	= xxxfb_copyarea,	/* Needed !!! */
-	.fb_imageblit	= xxxfb_imageblit,	/* Needed !!! */
+	.fb_fillrect	= xxxfb_fillrect,	/* Needed !!!   */
+	.fb_copyarea	= xxxfb_copyarea,	/* Obsolete     */
+	.fb_imageblit	= xxxfb_imageblit,	/* Needed !!!   */
 	.fb_cursor	= xxxfb_cursor,		/* Optional !!! */
 	.fb_sync	= xxxfb_sync,
 	.fb_ioctl	= xxxfb_ioctl,
@@ -836,7 +836,7 @@ static void xxxfb_remove(struct pci_dev *dev)
  *	@dev: PCI device
  *	@msg: the suspend event code.
  *
- *      See Documentation/power/admin-guide/devices.rst for more information
+ *      See Documentation/driver-api/pm/devices.rst for more information
  */
 static int xxxfb_suspend(struct pci_dev *dev, pm_message_t msg)
 {
@@ -851,7 +851,7 @@ static int xxxfb_suspend(struct pci_dev *dev, pm_message_t msg)
  *	xxxfb_resume - Optional but recommended function. Resume the device.
  *	@dev: PCI device
  *
- *      See Documentation/power/admin-guide/devices.rst for more information
+ *      See Documentation/driver-api/pm/devices.rst for more information
  */
 static int xxxfb_resume(struct pci_dev *dev)
 {
@@ -915,7 +915,7 @@ static void __exit xxxfb_exit(void)
  *	@dev: platform device
  *	@msg: the suspend event code.
  *
- *      See Documentation/power/admin-guide/devices.rst for more information
+ *      See Documentation/driver-api/pm/devices.rst for more information
  */
 static int xxxfb_suspend(struct platform_device *dev, pm_message_t msg)
 {
@@ -930,7 +930,7 @@ static int xxxfb_suspend(struct platform_device *dev, pm_message_t msg)
  *	xxxfb_resume - Optional but recommended function. Resume the device.
  *	@dev: platform device
  *
- *      See Documentation/power/admin-guide/devices.rst for more information
+ *      See Documentation/driver-api/pm/devices.rst for more information
  */
 static int xxxfb_resume(struct platform_dev *dev)
 {
